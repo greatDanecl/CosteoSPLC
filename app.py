@@ -16,7 +16,7 @@ import tempfile
 import json
 from extractor import extraer_variables_pdf, VariableContrato, TipoVariable, Recurrencia
 from calculadora import Dotacion, calcular_costos
-from lan_cargo_variables import cargar_variables_lan_cargo
+from lan_cargo_variables import cargar_variables_lan_cargo, calcular_componente_variable, TABLA_HBT_CAPITAN, TABLA_HBT_FO, hbt_a_valor
 
 # ─────────────────────────────────────────────
 # Configuración de página
@@ -84,37 +84,42 @@ def obtener_tramos_sueldo_fo():
 # HBT recalculation helper
 # ─────────────────────────────────────────────
 def _recalcular_hbt(hbt: dict):
-    """Recalcula el Componente Variable HBT en las variables ya cargadas."""
-    from lan_cargo_variables import calcular_componente_variable, TABLA_HBT_CAPITAN, TABLA_HBT_FO, hbt_a_valor
+    """
+    Recalcula solo valor_libro y tramos de antigüedad del Componente Variable HBT.
+    No toca valor_actual ni valor_nuevo para no pisar ediciones del usuario.
+    """
     cv = calcular_componente_variable(
         hbt["cap_a"], hbt["cap_b"], hbt["cap_c"],
         hbt["fo_a"],  hbt["fo_b"],  hbt["fo_c"], hbt["fo_subc"],
     )
     for v in st.session_state.variables:
         if "HBT" in v.nombre and "Capitán" in v.nombre:
-            v.valor_libro  = cv["CAP Nivel A"]
-            v.valor_actual = cv["CAP Nivel A"]
-            v.valor_nuevo  = cv["CAP Nivel A"]
+            # Solo actualizar valor_libro y tramos — no tocar actual/nuevo
+            v.valor_libro = cv["CAP Nivel A"]
             v.tramos_antiguedad = {
                 "Nivel A": cv["CAP Nivel A"],
                 "Nivel B": cv["CAP Nivel B"],
                 "Nivel C": cv["CAP Nivel C"],
             }
+            # Si el usuario no ha editado aún (actual == libro previo), actualizar también
+            if v.valor_actual == v.valor_nuevo:
+                v.valor_actual = cv["CAP Nivel A"]
+                v.valor_nuevo  = cv["CAP Nivel A"]
             v.nota_operacional = (
                 f"Calculado para {hbt['cap_a']:.0f}h CAP-A / "
-                f"{hbt['cap_b']:.0f}h CAP-B / {hbt['cap_c']:.0f}h CAP-C. "
-                "Ajusta las horas en el panel lateral."
+                f"{hbt['cap_b']:.0f}h CAP-B / {hbt['cap_c']:.0f}h CAP-C."
             )
         elif "HBT" in v.nombre and "Primer Oficial" in v.nombre:
-            v.valor_libro  = cv["FO Nivel A"]
-            v.valor_actual = cv["FO Nivel A"]
-            v.valor_nuevo  = cv["FO Nivel A"]
+            v.valor_libro = cv["FO Nivel A"]
             v.tramos_antiguedad = {
                 "Nivel A": cv["FO Nivel A"],
                 "Nivel B": cv["FO Nivel B"],
                 "Nivel C": cv["FO Nivel C"],
                 "Sub-C":   cv["FO Sub-C"],
             }
+            if v.valor_actual == v.valor_nuevo:
+                v.valor_actual = cv["FO Nivel A"]
+                v.valor_nuevo  = cv["FO Nivel A"]
             v.nota_operacional = (
                 f"Calculado para {hbt['fo_a']:.0f}h FO-A / "
                 f"{hbt['fo_b']:.0f}h FO-B / {hbt['fo_c']:.0f}h FO-C / "
@@ -199,7 +204,13 @@ def render_sidebar():
     hbt["fo_c"]   = st.sidebar.number_input("FO Nivel C",  min_value=0.0, max_value=120.0, value=hbt_defaults["fo_c"],   step=0.5, format="%.1f", key="hbt_fo_c")
     hbt["fo_subc"]= st.sidebar.number_input("FO Sub-C",    min_value=0.0, max_value=120.0, value=hbt_defaults["fo_subc"],step=0.5, format="%.1f", key="hbt_fo_subc")
 
-    if hbt != st.session_state.get("hbt_horas"):
+    # Comparar redondeado a 1 decimal para evitar falsos positivos con floats
+    hbt_prev = st.session_state.get("hbt_horas", {})
+    hbt_changed = any(
+        round(hbt.get(k, 0), 1) != round(hbt_prev.get(k, 0), 1)
+        for k in hbt
+    )
+    if hbt_changed:
         st.session_state.hbt_horas = hbt
         if st.session_state.variables:
             _recalcular_hbt(hbt)
