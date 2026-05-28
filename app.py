@@ -67,6 +67,7 @@ def inicializar_session():
         "n_ie": 0,
         "n_instructores": 0,
         "n_asesores": 0,
+        "hbt_horas": {"cap_a": 75.0, "cap_b": 75.0, "cap_c": 75.0, "fo_a": 75.0, "fo_b": 75.0, "fo_c": 75.0, "fo_subc": 70.0},
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -77,6 +78,49 @@ def obtener_tramos_sueldo_cap():
 
 def obtener_tramos_sueldo_fo():
     return ["Nivel A (≥8 años)", "Nivel B (4-7 años)", "Nivel C (<4 años)", "Sub-C (<4 años)"]
+
+
+# ─────────────────────────────────────────────
+# HBT recalculation helper
+# ─────────────────────────────────────────────
+def _recalcular_hbt(hbt: dict):
+    """Recalcula el Componente Variable HBT en las variables ya cargadas."""
+    from lan_cargo_variables import calcular_componente_variable, TABLA_HBT_CAPITAN, TABLA_HBT_FO, hbt_a_valor
+    cv = calcular_componente_variable(
+        hbt["cap_a"], hbt["cap_b"], hbt["cap_c"],
+        hbt["fo_a"],  hbt["fo_b"],  hbt["fo_c"], hbt["fo_subc"],
+    )
+    for v in st.session_state.variables:
+        if "HBT" in v.nombre and "Capitán" in v.nombre:
+            v.valor_libro  = cv["CAP Nivel A"]
+            v.valor_actual = cv["CAP Nivel A"]
+            v.valor_nuevo  = cv["CAP Nivel A"]
+            v.tramos_antiguedad = {
+                "Nivel A": cv["CAP Nivel A"],
+                "Nivel B": cv["CAP Nivel B"],
+                "Nivel C": cv["CAP Nivel C"],
+            }
+            v.nota_operacional = (
+                f"Calculado para {hbt['cap_a']:.0f}h CAP-A / "
+                f"{hbt['cap_b']:.0f}h CAP-B / {hbt['cap_c']:.0f}h CAP-C. "
+                "Ajusta las horas en el panel lateral."
+            )
+        elif "HBT" in v.nombre and "Primer Oficial" in v.nombre:
+            v.valor_libro  = cv["FO Nivel A"]
+            v.valor_actual = cv["FO Nivel A"]
+            v.valor_nuevo  = cv["FO Nivel A"]
+            v.tramos_antiguedad = {
+                "Nivel A": cv["FO Nivel A"],
+                "Nivel B": cv["FO Nivel B"],
+                "Nivel C": cv["FO Nivel C"],
+                "Sub-C":   cv["FO Sub-C"],
+            }
+            v.nota_operacional = (
+                f"Calculado para {hbt['fo_a']:.0f}h FO-A / "
+                f"{hbt['fo_b']:.0f}h FO-B / {hbt['fo_c']:.0f}h FO-C / "
+                f"{hbt['fo_subc']:.0f}h Sub-C."
+            )
+
 
 
 # ─────────────────────────────────────────────
@@ -135,6 +179,30 @@ def render_sidebar():
     st.session_state.n_ie = st.sidebar.number_input("N° Instructores Evaluadores (IE)", min_value=0, value=st.session_state.n_ie, step=1)
     st.session_state.n_instructores = st.sidebar.number_input("N° Instructores de Vuelo", min_value=0, value=st.session_state.n_instructores, step=1)
     st.session_state.n_asesores = st.sidebar.number_input("N° Asesores", min_value=0, value=st.session_state.n_asesores, step=1)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**⏱ Horas promedio mensuales HBT**")
+    st.sidebar.caption("Determina el Componente Variable. Ajusta según productividad real.")
+
+    hbt_defaults = st.session_state.get("hbt_horas", {
+        "cap_a": 75.0, "cap_b": 75.0, "cap_c": 75.0,
+        "fo_a": 75.0, "fo_b": 75.0, "fo_c": 75.0, "fo_subc": 70.0,
+    })
+    hbt = {}
+    st.sidebar.markdown("*Capitanes*")
+    hbt["cap_a"]  = st.sidebar.number_input("CAP Nivel A", min_value=0.0, max_value=120.0, value=hbt_defaults["cap_a"],  step=0.5, format="%.1f", key="hbt_cap_a")
+    hbt["cap_b"]  = st.sidebar.number_input("CAP Nivel B", min_value=0.0, max_value=120.0, value=hbt_defaults["cap_b"],  step=0.5, format="%.1f", key="hbt_cap_b")
+    hbt["cap_c"]  = st.sidebar.number_input("CAP Nivel C", min_value=0.0, max_value=120.0, value=hbt_defaults["cap_c"],  step=0.5, format="%.1f", key="hbt_cap_c")
+    st.sidebar.markdown("*Primeros Oficiales*")
+    hbt["fo_a"]   = st.sidebar.number_input("FO Nivel A",  min_value=0.0, max_value=120.0, value=hbt_defaults["fo_a"],   step=0.5, format="%.1f", key="hbt_fo_a")
+    hbt["fo_b"]   = st.sidebar.number_input("FO Nivel B",  min_value=0.0, max_value=120.0, value=hbt_defaults["fo_b"],   step=0.5, format="%.1f", key="hbt_fo_b")
+    hbt["fo_c"]   = st.sidebar.number_input("FO Nivel C",  min_value=0.0, max_value=120.0, value=hbt_defaults["fo_c"],   step=0.5, format="%.1f", key="hbt_fo_c")
+    hbt["fo_subc"]= st.sidebar.number_input("FO Sub-C",    min_value=0.0, max_value=120.0, value=hbt_defaults["fo_subc"],step=0.5, format="%.1f", key="hbt_fo_subc")
+
+    if hbt != st.session_state.get("hbt_horas"):
+        st.session_state.hbt_horas = hbt
+        if st.session_state.variables:
+            _recalcular_hbt(hbt)
 
 
 # ─────────────────────────────────────────────
