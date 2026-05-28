@@ -478,11 +478,22 @@ def render_resultados():
 
     # Cuadro punta a punta
     st.markdown("### 📌 Cuadro Punta a Punta")
+    # Calcular CAGR
+    años = len(resultados)
+    base = resumen["costo_actual_año1"]
+    final = resumen["costo_nuevo_año_final"]
+    if base and base > 0 and final and final > 0 and años > 0:
+        cagr = ((final / base) ** (1 / años) - 1) * 100
+        cagr_str = f"{cagr:+.2f}% anual"
+    else:
+        cagr_str = "—"
+
     df_pp = pd.DataFrame([
         {"Concepto": "Costo anual contrato actual — Año 1", "Valor": fmt_clp(resumen["costo_actual_año1"])},
         {"Concepto": f"Costo anual contrato nuevo — Año {len(resultados)}", "Valor": fmt_clp(resumen["costo_nuevo_año_final"])},
         {"Concepto": "Variación anual absoluta (punta a punta)", "Valor": fmt_clp(resumen["delta_punta_a_punta"])},
         {"Concepto": "Variación anual porcentual (punta a punta)", "Valor": fmt_pct(resumen["delta_pct_punta_a_punta"])},
+        {"Concepto": f"CAGR del convenio nuevo (Año 1 → Año {años})", "Valor": cagr_str},
         {"Concepto": "━━━━━━━━━━━━━━━━━━━", "Valor": ""},
         {"Concepto": f"Costo acumulado contrato actual ({len(resultados)} años)", "Valor": fmt_clp(resumen["costo_acumulado_actual"])},
         {"Concepto": f"Costo acumulado contrato nuevo ({len(resultados)} años)", "Valor": fmt_clp(resumen["costo_acumulado_nuevo"])},
